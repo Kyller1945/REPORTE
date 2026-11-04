@@ -13,18 +13,20 @@ document.addEventListener('dragover',e=>e.preventDefault());document.addEventLis
 function clear(){generation++;selected=null;release();$('report-file').value='';$('chosen-file').textContent='Ningún archivo seleccionado.';$('generate-report').disabled=true;show('Sesión limpia. Selecciona una base para comenzar.');}
 $('clear-report').addEventListener('click',clear);window.addEventListener('pagehide',clear);
 $('generate-report').addEventListener('click',async()=>{
- if(!selected)return;const ticket=++generation;const file=selected;const rules=$('excluded-names').value.split('\n').map(s=>s.trim()).filter(Boolean);const insurers=$('insurance-names').value.split('\n').map(s=>s.trim()).filter(Boolean);
+ if(!selected)return;const ticket=++generation;const file=selected;const mode=$('report-mode').value;const rules=$('excluded-names').value.split('\n').map(s=>s.trim()).filter(Boolean);const insurers=$('insurance-names').value.split('\n').map(s=>s.trim()).filter(Boolean);
  release();$('generate-report').disabled=true;show('Leyendo y filtrando la base…');
  try{
   const raw=await file.arrayBuffer();if(ticket!==generation)return;
   // Check declared expanded sizes before handing the workbook to its reader.
   const zip=await JSZip.loadAsync(raw);let expanded=0;for(const entry of Object.values(zip.files)){expanded+=entry._data?.uncompressedSize||0;if(expanded>120*1024*1024)throw Error('El Excel descomprimido supera 120 MiB. Reduce el tamaño de la base.');}
-  const source=await readReport(raw,ExcelJS);if(ticket!==generation)return;
-  const data=cleanReport(source.headers,source.rows,rules,insurers);show('Generando las cinco hojas y la tabla dinámica…');
+  const source=await readReport(raw,ExcelJS,mode);if(ticket!==generation)return;
+  const data=mode==='update'?source.data:cleanReport(source.headers,source.rows,rules,insurers);show('Generando las cinco hojas y la tabla dinámica…');
   const bytes=await buildReport(data,ExcelJS,JSZip);if(ticket!==generation)return;
   url=URL.createObjectURL(new Blob([bytes],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-  $('report-download').href=url;$('report-download').download=`${file.name.replace(/\.xlsx$/i,'')}_reporte_2026.xlsx`;
-  $('report-counts').textContent=`${data.rows.length} registros incluidos · ${data.excluded.length} excluidos por proveedor · ${data.ignored} de otras cuentas o años.`;
+  $('report-download').href=url;$('report-download').download=`${file.name.replace(/\.xlsx$/i,'')}_${mode==='update'?'actualizado':'reporte_2026'}.xlsx`;
+  $('report-counts').textContent=mode==='update'?`${data.rows.length} registros de TOTAL · ${data.excluded.length} en EXCLUIDOS · ${data.restored} coincidencias retiradas de EXCLUIDOS.`:`${data.rows.length} registros incluidos · ${data.excluded.length} excluidos por proveedor · ${data.ignored} de otras cuentas o años.`;
   $('report-result').hidden=false;show('Reporte listo. Revisa EXCLUIDOS para comprobar las coincidencias de proveedores.');
  }catch(e){if(ticket===generation)show(`No se generó el reporte: ${e.message}`);}finally{if(ticket===generation)$('generate-report').disabled=!selected;}
 });
+
+$('report-mode').addEventListener('change',()=>{generation++;release();const update=$('report-mode').value==='update';$('report-rules').hidden=update;$('generate-report').textContent=update?'Actualizar desde TOTAL':'Generar reporte';$('generate-report').disabled=!selected;$('mode-help').textContent=update?'Edita TOTAL y guarda tu Excel. Se reconstruyen RESUMEN, DATA y VCTO sin aplicar exclusiones. Se retiran de EXCLUIDOS las filas idénticas copiadas a TOTAL. Las filas eliminadas de TOTAL no se archivan automáticamente. Se genera un nuevo archivo con las cinco hojas; no se conservan hojas adicionales ni formatos personalizados.':'Aplica las cuentas y exclusiones configuradas.';show('Modo seleccionado. Selecciona el archivo correspondiente y pulsa el botón para continuar.');});

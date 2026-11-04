@@ -42,16 +42,35 @@ export function cleanReport(headers, source, exclusions=DEFAULT_EXCLUSIONS, insu
 }
 
 function value(cell){const v=cell.value;if(v&&typeof v==='object'&&!(v instanceof Date)){if('formula'in v||'sharedFormula'in v){if(v.result===undefined)throw Error('La base tiene fórmulas sin resultado guardado. Abre y guarda el archivo en Excel primero.');return v.result;}if(v.richText)return v.richText.map(x=>x.text).join('');if(v.error)throw Error('La base contiene una celda con error de Excel.');if(v.text)return v.text;}return v;}
-export async function readReport(buffer,Excel){
+export async function readReport(buffer,Excel,mode='new'){
  const wb=new Excel.Workbook();await wb.xlsx.load(buffer);
+ if(mode==='update'){
+  const total=wb.getWorksheet('TOTAL');if(!total)throw Error('No existe la hoja TOTAL. Selecciona el reporte generado y editado.');
+  const base=readSheet(total,wb.properties.date1904),headers=base.headers;
+  const find=n=>{const hits=headers.map((h,i)=>norm(h)===norm(n)?i:-1).filter(i=>i>=0);if(hits.length!==1)throw Error(`TOTAL: falta o se repite ${n}.`);return hits[0];};
+  const provider=find('Proveedor'),date=find('Fecha comprobante'),pen=find('Saldo PEN'),usd=find('Saldo USD');find('Cuenta principal');
+  const rows=base.rows.filter(r=>r.some(v=>v!=null&&v!==''));
+  rows.forEach((r,i)=>{const d=asDate(r[date]);if(!d||d.getUTCFullYear()!==2026)throw Error(`TOTAL, registro ${i+1}: Fecha comprobante debe ser válida y de 2026.`);r[date]=d;if(!String(r[provider]??'').trim())throw Error(`TOTAL, registro ${i+1}: proveedor vacío.`);headers.forEach((h,c)=>{if(/^(SALDO|IMPORTE)(PEN|USD)$/.test(norm(h))&&(typeof r[c]!=='number'||!Number.isFinite(r[c])))throw Error(`TOTAL, registro ${i+1}: ${h} debe ser un número.`);});});
+  let excluded=[];const es=wb.getWorksheet('EXCLUIDOS');let restored=0;
+  if(es){const ex=readSheet(es,wb.properties.date1904);const indexes=headers.map(h=>ex.headers.findIndex(e=>norm(e)===norm(h)));if(indexes.some(i=>i<0))throw Error('EXCLUIDOS debe conservar las mismas columnas de TOTAL.');const reason=ex.headers.findIndex(h=>norm(h)==='MOTIVODEEXCLUSION');
+   const key=r=>JSON.stringify(r.map(v=>v??null)),matches=new Map();for(const r of rows){const k=key(r);matches.set(k,(matches.get(k)||0)+1);}
+   for(const row of ex.rows.filter(r=>r.some(v=>v!=null&&v!==''))){const r=indexes.map(i=>row[i]??null),k=key(r);if(matches.get(k)>0){matches.set(k,matches.get(k)-1);restored++;}else excluded.push([...r,reason>=0?row[reason]:'Excluido previamente']);}
+  }
+  return {data:{headers,rows,excluded,provider,date,pen,usd,ignored:0,restored}};
+ }
  const candidates=wb.worksheets.filter(s=>s.getRow(1).values.some(v=>norm(v)==='CUENTAPRINCIPAL'));
  if(candidates.length!==1)throw Error('Debe existir una sola hoja con los encabezados en la primera fila, incluida Cuenta principal.');
- const s=candidates[0];if(s.rowCount>100000)throw Error('Máximo 100 000 filas por archivo.');
+ return readSheet(candidates[0],wb.properties.date1904);
+}
+function readSheet(s,date1904){
+ if(s.rowCount>100000)throw Error('Máximo 100 000 filas por archivo.');
  const headers=Array.from({length:s.columnCount},(_,i)=>String(value(s.getCell(1,i+1))??''));
+ // Pasting a full EXCLUIDOS row can leave its reason beyond TOTAL's headers.
+ while(headers.length&&!headers.at(-1).trim())headers.pop();
  const rows=[];for(let r=2;r<=s.rowCount;r++)rows.push(headers.map((_,i)=>value(s.getCell(r,i+1))));
  // Convert unformatted Excel date serials using the workbook's actual date system.
  const dateColumns=headers.map((h,i)=>norm(h).startsWith('FECHA')?i:-1).filter(i=>i>=0);
- for(const r of rows)for(const c of dateColumns)if(typeof r[c]==='number')r[c]=new Date(Date.UTC(wb.properties.date1904?1904:1899,wb.properties.date1904?0:11,wb.properties.date1904?1:30)+Math.floor(r[c])*86400000);
+ for(const r of rows)for(const c of dateColumns)if(typeof r[c]==='number')r[c]=new Date(Date.UTC(date1904?1904:1899,date1904?0:11,date1904?1:30)+Math.floor(r[c])*86400000);
  return {headers,rows};
 }
 const x=v=>String(v??'').replace(/[<>&"']/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;',"'":'&apos;'}[c]));
@@ -78,6 +97,7 @@ export async function buildReport(data,Excel,Zip){
  const ps=wb.addWorksheet('VCTO',{views:[{state:'frozen',xSplit:1,ySplit:2}]});ps.addRow(['Proveedor',...months.flatMap(m=>[`${MONTHS[m]} - 26`,null])]);ps.addRow(['',...months.flatMap(()=>['Saldo PEN','Saldo USD'])]);
  months.forEach((_,i)=>ps.mergeCells(1,2+i*2,1,3+i*2));
  for(const n of names)ps.addRow([n,...months.flatMap(m=>groups.get(n).months.get(m)||[0,0])]);
+ ps.addRow(['Total general',...months.flatMap(m=>[0,1].map(j=>names.reduce((sum,n)=>sum+(groups.get(n).months.get(m)?.[j]||0),0)))]).font={bold:true};
  ps.getColumn(1).width=48;for(let i=2;i<=1+months.length*2;i++){ps.getColumn(i).width=19;ps.getColumn(i).numFmt='#,##0;[Red]-#,##0';}
  for(const i of [1,2]){ps.getRow(i).font={bold:true,color:{argb:'FFFFFFFF'}};ps.getRow(i).fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF163F4A'}};ps.getRow(i).height=26;}
  const zip=await Zip.loadAsync(await wb.xlsx.writeBuffer());
@@ -97,7 +117,7 @@ export async function buildReport(data,Excel,Zip){
  zip.file('xl/pivotCache/pivotCacheRecords1.xml',xml(`<pivotCacheRecords xmlns="${ns}" count="${cached.length}">${records.join('')}</pivotCacheRecords>`));
  zip.file('xl/pivotCache/_rels/pivotCacheDefinition1.xml.rels',xml(`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/pivotCacheRecords" Target="pivotCacheRecords1.xml"/></Relationships>`));
  const pf=headers.map((_,i)=>{const axis=i===data.provider?'axisRow':i===mi?'axisCol':null;return axis?`<pivotField axis="${axis}" showAll="0" defaultSubtotal="0"${i===mi?' numFmtId="165"':''}><items count="${unique[i].length}">${unique[i].map((_,j)=>`<item x="${j}"/>`).join('')}</items></pivotField>`:`<pivotField${[data.pen,data.usd].includes(i)?' dataField="1"':''} showAll="0"/>`;}).join('');
- zip.file('xl/pivotTables/pivotTable1.xml',xml(`<pivotTableDefinition xmlns="${ns}" name="ReporteMes" cacheId="1" dataCaption="Saldos" rowGrandTotals="0" colGrandTotals="0" compact="0" compactData="0" gridDropZones="0" multipleFieldFilters="0" createdVersion="6" updatedVersion="6" minRefreshableVersion="3"><location ref="A1:${col(months.length*2)}${names.length+2}" firstHeaderRow="1" firstDataRow="2" firstDataCol="1"/><pivotFields count="${headers.length}">${pf}</pivotFields><rowFields count="1"><field x="${data.provider}"/></rowFields><rowItems count="${names.length}">${names.map((_,i)=>`<i><x v="${i}"/></i>`).join('')}</rowItems><colFields count="2"><field x="${mi}"/><field x="-2"/></colFields><colItems count="${months.length*2}">${months.flatMap((_,i)=>[0,1].map(j=>`<i i="${j}"><x v="${i}"/><x v="${j}"/></i>`)).join('')}</colItems><dataFields count="2"><dataField name="Suma de Saldo PEN" fld="${data.pen}" subtotal="sum" numFmtId="3"/><dataField name="Suma de Saldo USD" fld="${data.usd}" subtotal="sum" numFmtId="3"/></dataFields><pivotTableStyleInfo name="PivotStyleMedium9" showRowHeaders="1" showColHeaders="1" showRowStripes="0" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>`));
+ zip.file('xl/pivotTables/pivotTable1.xml',xml(`<pivotTableDefinition xmlns="${ns}" name="ReporteMes" cacheId="1" dataCaption="Saldos" rowGrandTotals="0" colGrandTotals="1" compact="0" compactData="0" gridDropZones="0" multipleFieldFilters="0" createdVersion="6" updatedVersion="6" minRefreshableVersion="3"><location ref="A1:${col(months.length*2)}${names.length+3}" firstHeaderRow="1" firstDataRow="2" firstDataCol="1"/><pivotFields count="${headers.length}">${pf}</pivotFields><rowFields count="1"><field x="${data.provider}"/></rowFields><rowItems count="${names.length+1}">${names.map((_,i)=>`<i><x v="${i}"/></i>`).join('')}<i t="grand"><x/></i></rowItems><colFields count="2"><field x="${mi}"/><field x="-2"/></colFields><colItems count="${months.length*2}">${months.flatMap((_,i)=>[0,1].map(j=>`<i i="${j}"><x v="${i}"/><x v="${j}"/></i>`)).join('')}</colItems><dataFields count="2"><dataField name="Suma de Saldo PEN" fld="${data.pen}" subtotal="sum" numFmtId="3"/><dataField name="Suma de Saldo USD" fld="${data.usd}" subtotal="sum" numFmtId="3"/></dataFields><pivotTableStyleInfo name="PivotStyleMedium9" showRowHeaders="1" showColHeaders="1" showRowStripes="0" showColStripes="0" showLastColumn="1"/></pivotTableDefinition>`));
  zip.file('xl/pivotTables/_rels/pivotTable1.xml.rels',xml(`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${rel}/pivotCacheDefinition" Target="../pivotCache/pivotCacheDefinition1.xml"/></Relationships>`));
  const patch=async(path,before,insert)=>zip.file(path,(await zip.file(path).async('string')).replace(before,insert+before));
  await patch('xl/workbook.xml','</workbook>','<pivotCaches><pivotCache cacheId="1" r:id="rIdPivotCache"/></pivotCaches>');

@@ -45,7 +45,7 @@ Selecciona **REPORTE DE MES**, carga la base `.xlsx`, revisa las exclusiones si 
 | EXCLUIDOS | Registros excluidos por proveedor, solo cuentas seleccionadas de 2026, con el motivo. |
 | RESUMEN | Una fila por proveedor con Saldo PEN y USD, más un total al final. |
 | DATA | Base limpia más Mes, según Fecha comprobante, como fecha real con formato español `mmmm - yy`. |
-| VCTO | Tabla dinámica nativa: proveedores en filas, meses en columnas y suma de Saldo PEN y USD. Sin totales generales. |
+| VCTO | Tabla dinámica nativa: proveedores en filas, meses en columnas y suma de Saldo PEN y USD. Con totales inferiores por mes y moneda; sin totales a la derecha. |
 
 Los meses están en orden cronológico; aparecen solo los meses presentes en la base incluida. La fecha de vencimiento se conserva y no se usa para agrupar. Los registros de otras cuentas o años se omiten de todas las hojas; su cantidad aparece en la página.
 
@@ -75,4 +75,17 @@ GitHub sirve la página y puede registrar datos habituales de la visita, como la
 
 ## Verificación
 
-44 pruebas automáticas del corrector, filtros y privacidad. Prueba de navegación, generación, descarga, limpieza y tamaño móvil en Edge. Con el ejemplo se compararon los registros conservados celda por celda y se conciliaron las sumas por proveedor y mes. Se verificaron las cinco hojas, XML, campos y registros de la caché de la tabla dinámica con un lector independiente. No se ha comprobado visualmente el resultado dentro de Excel de escritorio.
+46 pruebas automáticas del corrector, filtros y privacidad. Prueba de navegación, generación, descarga, limpieza y tamaño móvil en Edge. Con el ejemplo se compararon los registros conservados celda por celda y se conciliaron las sumas por proveedor y mes. Se verificaron las cinco hojas, XML, campos y registros de la caché de la tabla dinámica con un lector independiente. No se ha comprobado visualmente el resultado dentro de Excel de escritorio.
+
+
+## Actualizar después de editar TOTAL
+
+1. En el Excel generado, agrega, elimina o corrige registros en TOTAL. Conserva los encabezados y usa fechas de comprobante de 2026. Guarda el archivo.
+2. En la página selecciona **Actualizar desde TOTAL**, carga ese Excel y pulsa **Actualizar desde TOTAL**.
+3. Descarga el nuevo reporte. RESUMEN, DATA y VCTO se reconstruyen desde TOTAL, sin volver a filtrar cuentas o proveedores. Se conservan los valores y el orden de TOTAL; los formatos se generan de nuevo.
+
+Puedes copiar una fila desde EXCLUIDOS a TOTAL. Si ambas filas tienen los mismos datos, la copia de EXCLUIDOS se retira automáticamente, una por cada coincidencia. Si además cambias sus datos, retírala tú de EXCLUIDOS para evitar que figure en ambas hojas. Las filas eliminadas de TOTAL no se archivan automáticamente en EXCLUIDOS. Si quieres conservarlas, muévelas a EXCLUIDOS antes de guardar.
+
+Se genera un archivo nuevo con las cinco hojas. Otras hojas, anotaciones, formatos personalizados y fórmulas originales no se conservan: se utilizan sus valores guardados. Las fórmulas deben tener resultado calculado en Excel. No añadas una fila de totales manual en TOTAL.
+
+VCTO conserva los totales inferiores y omite los totales a la derecha, tanto al generar como al actualizar.
