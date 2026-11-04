@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Reporte de mes</title><link rel="icon" href="./assets/icon.svg"><link rel="stylesheet" href="./styles.css"><link rel="stylesheet" href="./reporte.css">
+<script src="./vendor/exceljs.min.js" defer></script><script src="./vendor/jszip.min.js" defer></script><script type="module" src="./reporte.js"></script></head>
+<body><div class="page-shell"><header class="masthead"><span class="brand">Herramientas de trabajo</span><span class="local-badge">● Procesamiento local</span></header>
+<nav class="tool-nav" aria-label="Herramientas"><a href="./index.html">CORRECTOR TXT</a><a href="./reporte.html" aria-current="page">REPORTE DE MES</a></nav>
+<main><section class="intro"><p class="eyebrow">CUENTAS POR PAGAR · 2026</p><h1>Reporte de mes<span class="title-dot">.</span></h1><p class="intro-copy">De tu base de datos al reporte de proveedores.<br>Selecciona el Excel y descarga las cinco hojas preparadas.</p></section>
+<section class="workspace"><h2>1. Selecciona la base</h2><p>Archivo .xlsx con los encabezados en la primera fila. Máximo 20 MiB.</p><label class="drop-zone" id="report-drop">Arrastra aquí tu Excel<br><span class="button button-primary">Seleccionar Excel</span><input class="sr-only" type="file" id="report-file" accept=".xlsx"></label>
+<p id="chosen-file">Ningún archivo seleccionado.</p>
+<details><summary>2. Revisar reglas y proveedores excluidos</summary><p>Cuentas: 42120001, 42120002, 42410001, 43120001 y 43120002. Solo fecha de comprobante de 2026. ONCOSALUD permanece incluido.</p>
+<label for="excluded-names">Proveedores a excluir (uno por línea)</label><textarea id="excluded-names" rows="9" spellcheck="false"></textarea>
+<p>Se ignoran tildes, espacios y puntuación. Puedes escribir el inicio del nombre, por ejemplo TALMA SERVICIOS AEROPOR. Cada coincidencia se detalla en EXCLUIDOS.</p>
+<label for="insurance-names">Palabras y nombres de aseguradoras a excluir (uno por línea)</label><textarea id="insurance-names" rows="4" spellcheck="false"></textarea><p>Revisa esta lista si aparece una aseguradora nueva cuyo nombre no incluye “seguros”. Los cambios se usan solo durante esta sesión.</p></details>
+<div class="report-actions"><button id="generate-report" class="button button-primary" disabled>Generar reporte</button><button id="clear-report" class="button button-clear">Limpiar</button></div>
+<p id="report-status" role="status" aria-live="polite">Selecciona un Excel para comenzar.</p><div id="report-result" hidden><p id="report-counts"></p><a id="report-download" class="button button-primary">Descargar reporte Excel ↓</a></div>
+<p class="privacy-note">El archivo se procesa en tu navegador. Sin subidas, sin historial.</p></section>
+<section class="workspace"><h2>Tu Excel incluye</h2><p><strong>TOTAL:</strong> base limpia. <strong>EXCLUIDOS:</strong> proveedores retirados y motivo, solo cuentas seleccionadas de 2026. <strong>RESUMEN:</strong> saldos por proveedor. <strong>DATA:</strong> base con el mes del comprobante. <strong>VCTO:</strong> tabla dinámica por proveedor y mes, con PEN y USD, sin totales generales.</p><p>Los importes se muestran sin decimales, conservando la precisión del dato. Los registros de otros años o de otras cuentas no se incluyen en ninguna de estas hojas.</p></section>
+<noscript>Activa JavaScript para generar el reporte.</noscript></main><footer>Herramientas de trabajo · Procesamiento en tu equipo</footer></div></body></html>
